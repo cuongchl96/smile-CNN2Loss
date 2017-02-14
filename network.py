@@ -122,11 +122,12 @@ reg_loss = reg_param * (tf.nn.l2_loss(variables_dict["W_conv1"]) +
                         tf.nn.l2_loss(W_last1))
 
 VeLoss_k = 0.005
+sigma = 100
 f = tf.sub(f1,f2)
-f = 0.5 * tf.mul(f,f)
-VeLoss = tf.reduce_mean(VeLoss_k * tf.mul(pro_y,f))
+f = tf.mul(f,f)
+VeLoss = tf.reduce_mean(0.5 * (pro_y * f)) + tf.reduce_mean(0.5 * (1-pro_y) * tf.maximum(0.,sigma - f))
 
-cross_entropy1 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv1, y1_)) + reg_loss + VeLoss
+cross_entropy1 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv1, y1_)) + reg_loss + VeLoss * VeLoss_k
 train_step1 = tf.train.MomentumOptimizer(learning_rate=0.001,momentum=0.9).minimize(cross_entropy1)
 correct_prediction1 = tf.equal(tf.argmax(y_conv1,1), tf.argmax(y1_,1))
 accuracy1 = tf.reduce_mean(tf.cast(correct_prediction1, tf.float32))
@@ -140,6 +141,8 @@ N = len(trainImg)
 batch_size = 256
 
 sess.run(tf.initialize_all_variables())
+best_accuracy = 0.
+
 
 for i in range(500):
     p1 = np.arange(N)
@@ -153,7 +156,7 @@ for i in range(500):
         bimg2, blabel2 = getBatch(p2[indData:indData+batch_size],trainImg, trainLabel)
         compare_y = compare(blabel1,blabel2)
 
-        train_step2.run(feed_dict={x2: bimg2, y2_: blabel2, pro_y: compare_y.astype(np.float32), keep_prob: 0.5})
+        f2.eval(feed_dict={x2: bimg2, y2_: blabel2, pro_y: compare_y.astype(np.float32), keep_prob: 0.5})
         train_step1.run(feed_dict={x1: bimg1, y1_: blabel1, pro_y: compare_y.astype(np.float32), x2: bimg2, y2_: blabel2,keep_prob: 0.5})
         #print(VeLoss.eval(sess))
 
@@ -161,5 +164,8 @@ for i in range(500):
     ti, tl = getBatch(range(1000), testImg, testLabel)
     acc1 = accuracy1.eval(feed_dict={x1: ti, y1_: tl, keep_prob: 1.0})
     acc2 = accuracy2.eval(feed_dict={x2: ti, y2_: tl, keep_prob: 1.0})
-    print("test accuracy 1 %g:" %acc1)
-    print("test accuracy 2 %g:" %acc2)
+    if (acc1 > best_accuracy):
+        best_accuracy = acc1
+    print("test accuracy: %g" %acc1)
+    print("Best: %g"%best_accuracy)
+
